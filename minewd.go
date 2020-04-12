@@ -14,10 +14,11 @@ import (
 )
 
 type dbRecord struct {
-	tagID string
-	boxID string
-	rssi  int8
-	data  string
+	dateTime string
+	tagID    string
+	boxID    string
+	rssi     int8
+	data     string
 }
 
 type tag struct {
@@ -46,7 +47,7 @@ func main() {
 	}
 
 	// start database goroutine
-	c := make(chan dbRecord)
+	c := make(chan dbRecord, 32)
 	go database(cfg, c)
 
 	// start listening
@@ -82,15 +83,10 @@ func database(cfg *ini.File, c chan dbRecord) {
 
 		// Create connection pool
 		db, err := sql.Open("mysql", connStr)
-		if err != nil {
-			log.Println("Error opening database->file", cfg.Section("database").Key("file").String())
-			panic(err)
-		}
+		chkErr(err)
 
 		stmt, err = db.Prepare("INSERT INTO minew(boxID, tagID, rssi, batt) values(?,?,?,?)")
-		if err != nil {
-			panic(err)
-		}
+		chkErr(err)
 
 		log.Println("Connected to database", cfg.Section("database").Key("db").String())
 	}
@@ -136,6 +132,7 @@ func (p packet) analyzeBLE(buf []byte, reqLen int, c chan dbRecord) {
 	}
 
 	ble := buf[14 : reqLen-1]
+	tnow := sqltime(time.Now().Unix())
 
 	for i := p.nrBLE; i > 0; i-- {
 
@@ -147,21 +144,37 @@ func (p packet) analyzeBLE(buf []byte, reqLen int, c chan dbRecord) {
 		t.nrBLEdata = binary.BigEndian.Uint16(ble[6:8])
 		ble = ble[8:]
 		for d = 0; d < t.nrBLEdata; d++ {
-			// meestal 1
-			// schrijf naar channel
-		}
 
+			rawLen := int(ble[0])
+			var db dbRecord
+			db.dateTime = tnow
+			db.boxID = t.boxID
+			db.tagID = t.tagID
+			if rawLen != 0 {
+				db.data = hex.EncodeToString(buf[1 : 1+rawLen])
+			}
+			db.rssi = int8(ble[rawLen+2])
+
+			// send dbRecord to database through channel
+			c <- db
+
+			ble = ble[rawLen+3:]
+		}
 	}
-	log.Println("datal:", p.datal)
-	log.Println("BoxID:", p.boxID)
-	log.Println("nrBLE:", p.nrBLE)
 }
 
 func sqltime(ts int64) string {
 
-	// return timestamp formatted for mssql
+	// return timestamp formatted for mssql or mysql
 	const sqlts = "2006-01-02 15:04:05"
 	loc, _ := time.LoadLocation("UTC")
 	t := time.Unix(ts, 0).In(loc)
 	return t.Format(sqlts)
+}
+
+func chkErr(e error) {
+	if e != nil {
+		log.Println(e)
+		os.Exit(1)
+	}
 }
