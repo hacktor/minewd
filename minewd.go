@@ -85,13 +85,17 @@ func database(cfg *ini.File, c chan dbRecord) {
 		db, err := sql.Open("mysql", connStr)
 		chkErr(err)
 
-		stmt, err = db.Prepare("INSERT INTO minew(boxID, tagID, rssi, batt) values(?,?,?,?)")
+		stmt, err = db.Prepare("INSERT INTO minew(dateTime, boxID, tagID, rssi, data) values(?,?,?,?,?)")
 		chkErr(err)
 
 		log.Println("Connected to database", cfg.Section("database").Key("db").String())
 	}
 	for r := range c {
-		stmt.Exec(r.boxID, r.tagID, r.rssi, string(r.data))
+		_, err := stmt.Exec(r.dateTime, r.boxID, r.tagID, r.rssi, string(r.data))
+		if err != nil {
+			log.Println("Insert failed", err)
+		}
+		log.Printf("%+v\n", r)
 	}
 }
 
@@ -132,12 +136,12 @@ func (p packet) analyzeBLE(buf []byte, reqLen int, c chan dbRecord) {
 	}
 
 	ble := buf[14 : reqLen-1]
-	tnow := sqltime(time.Now().Unix())
 
 	for i := p.nrBLE; i > 0; i-- {
 
 		var t tag
 		var d uint16
+		tnow := sqltime(time.Now().Unix())
 
 		t.boxID = p.boxID
 		t.tagID = hex.EncodeToString(ble[0:6])
@@ -175,6 +179,6 @@ func sqltime(ts int64) string {
 func chkErr(e error) {
 	if e != nil {
 		log.Println(e)
-		os.Exit(1)
+		//os.Exit(1)
 	}
 }
