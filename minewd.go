@@ -74,6 +74,7 @@ func main() {
 func database(cfg *ini.File, c chan dbRecord) {
 
 	// connect to database if ontvanger->dbsav is defined
+	is_connected := false
 	if cfg.Section("ontvanger").HasKey("dbsav") &&
 		cfg.Section("database").Key("type").String() == "mysql" {
 
@@ -83,17 +84,34 @@ func database(cfg *ini.File, c chan dbRecord) {
 
 		// Create connection pool
 		db, err := sql.Open("mysql", connStr)
-		chkErr(err)
+		if err != nil {
+			log.Println(err)
+		} else {
+			is_connected = true
+		}
 
 		stmt, err = db.Prepare("INSERT INTO minew(dateTime, boxID, tagID, rssi, data) values(?,?,?,?,?)")
-		chkErr(err)
+		if err != nil {
+			log.Println(err)
+			is_connected = false
+		} else {
+			is_connected = true
+		}
 
-		log.Println("Connected to database", cfg.Section("database").Key("db").String())
+		if is_connected {
+			log.Println("Connected to database", cfg.Section("database").Key("db").String())
+		} else {
+			log.Println("Connection to database failed")
+		}
+
 	}
 	for r := range c {
-		_, err := stmt.Exec(r.dateTime, r.boxID, r.tagID, r.rssi, string(r.data))
-		if err != nil {
-			log.Println("Insert failed", err)
+
+		if is_connected {
+			_, err := stmt.Exec(r.dateTime, r.boxID, r.tagID, r.rssi, string(r.data))
+			if err != nil {
+				log.Println("Insert failed", err)
+			}
 		}
 		log.Printf("%+v\n", r)
 	}
@@ -174,11 +192,4 @@ func sqltime(ts int64) string {
 	loc, _ := time.LoadLocation("UTC")
 	t := time.Unix(ts, 0).In(loc)
 	return t.Format(sqlts)
-}
-
-func chkErr(e error) {
-	if e != nil {
-		log.Println(e)
-		//os.Exit(1)
-	}
 }
