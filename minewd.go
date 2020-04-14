@@ -21,18 +21,12 @@ type dbRecord struct {
 	data     string
 }
 
-type tag struct {
-	tagID     string
-	boxID     string
-	rssi      int
-	nrBLEdata uint16
-}
-
 type packet struct {
-	datal uint32
-	boxID string
-	nrBLE uint16
-	tags  []tag
+	datal   uint32
+	remAddr string
+	reqLen  int
+	boxID   string
+	nrBLE   uint16
 }
 
 var db *sql.DB // global variables to share between main and the handlers
@@ -74,7 +68,7 @@ func main() {
 func database(cfg *ini.File, c chan dbRecord) {
 
 	// connect to database if ontvanger->dbsav is defined
-	is_connected := false
+	isConnected := false
 	if cfg.Section("ontvanger").HasKey("dbsav") &&
 		cfg.Section("database").Key("type").String() == "mysql" {
 
@@ -87,18 +81,18 @@ func database(cfg *ini.File, c chan dbRecord) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			is_connected = true
+			isConnected = true
 		}
 
 		stmt, err = db.Prepare("INSERT INTO minew(dateTime, boxID, tagID, rssi, data) values(?,?,?,?,?)")
 		if err != nil {
 			log.Println(err)
-			is_connected = false
+			isConnected = false
 		} else {
-			is_connected = true
+			isConnected = true
 		}
 
-		if is_connected {
+		if isConnected {
 			log.Println("Connected to database", cfg.Section("database").Key("db").String())
 		} else {
 			log.Println("Connection to database failed")
@@ -107,7 +101,7 @@ func database(cfg *ini.File, c chan dbRecord) {
 	}
 	for r := range c {
 
-		if is_connected {
+		if isConnected {
 			_, err := stmt.Exec(r.dateTime, r.boxID, r.tagID, r.rssi, string(r.data))
 			if err != nil {
 				log.Println("Insert failed", err)
@@ -124,54 +118,53 @@ func handleConn(conn net.Conn, c chan dbRecord) {
 	// Make a buffer to hold incoming data.
 	buf := make([]byte, 4096)
 	var p packet
+	var err error
 
 	// Read the incoming connection into the buffer.
-	remAddr := conn.RemoteAddr().String()
-	reqLen, err := conn.Read(buf)
+	p.remAddr = conn.RemoteAddr().String()
+	p.reqLen, err = conn.Read(buf)
 	if err != nil {
-		log.Println(remAddr, "closed connection:", err.Error())
+		log.Println(p.remAddr, "closed connection:", err.Error())
 		return
 	}
 	// log.Println("From", remAddr, ":", buf[:reqLen])
 
 	// Analyze packet
-	p.analyzeBLE(buf, reqLen, c)
+	p.analyzeBLE(buf, c)
 
 	// Send a response back
 	_, err = conn.Write([]byte("Message received: " + string(buf)))
 	if err != nil {
-		log.Println("Error wrinting to", remAddr, ":", err.Error())
+		log.Println("Error wrinting to", p.remAddr, ":", err.Error())
 	}
 }
 
-func (p packet) analyzeBLE(buf []byte, reqLen int, c chan dbRecord) {
+func (p packet) analyzeBLE(buf []byte, c chan dbRecord) {
 
-	if buf[0] == 187 && buf[reqLen-1] == 221 {
+	if buf[0] == 187 && buf[p.reqLen-1] == 221 {
 
 		p.datal = binary.BigEndian.Uint32(buf[2:6])
 		p.boxID = hex.EncodeToString(buf[6:12])
 		p.nrBLE = binary.BigEndian.Uint16(buf[12:14])
 	}
 
-	ble := buf[14 : reqLen-1]
+	ble := buf[14 : p.reqLen-1]
 
 	for i := p.nrBLE; i > 0; i-- {
 
-		var t tag
 		var d uint16
 		tnow := sqltime(time.Now().Unix())
 
-		t.boxID = p.boxID
-		t.tagID = hex.EncodeToString(ble[0:6])
-		t.nrBLEdata = binary.BigEndian.Uint16(ble[6:8])
+		tagID := hex.EncodeToString(ble[0:6])
+		nrBLEdata := binary.BigEndian.Uint16(ble[6:8])
 		ble = ble[8:]
-		for d = 0; d < t.nrBLEdata; d++ {
+		for d = 0; d < nrBLEdata; d++ {
 
 			rawLen := int(ble[0])
 			var db dbRecord
 			db.dateTime = tnow
-			db.boxID = t.boxID
-			db.tagID = t.tagID
+			db.boxID = p.boxID
+			db.tagID = tagID
 			if rawLen != 0 {
 				db.data = hex.EncodeToString(buf[1 : 1+rawLen])
 			}
