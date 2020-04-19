@@ -30,7 +30,8 @@ type packet struct {
 	nrBLE   uint16
 }
 
-var db *sql.DB // global variables to share between main and the handlers
+// global variables to share between main and the handlers
+var db *sql.DB
 var stmt *sql.Stmt
 var c = make(chan dbRecord, 64)
 
