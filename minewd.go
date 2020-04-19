@@ -32,9 +32,11 @@ type packet struct {
 
 var db *sql.DB // global variables to share between main and the handlers
 var stmt *sql.Stmt
+var c = make(chan dbRecord, 64)
 
 func main() {
 
+	// load configuration
 	cfg, err := ini.Load("minewd.ini")
 	if err != nil {
 		log.Printf("Fail to read file: %v", err)
@@ -42,8 +44,7 @@ func main() {
 	}
 
 	// start database goroutine
-	c := make(chan dbRecord, 64)
-	go database(cfg, c)
+	go database(cfg)
 
 	// start listening
 	ln, err := net.Listen("tcp", ":"+cfg.Section("ontvanger").Key("port").String())
@@ -62,57 +63,60 @@ func main() {
 			continue
 		}
 
-		go handleConn(conn, c)
+		go handleConn(conn)
 	}
 }
 
-func database(cfg *ini.File, c chan dbRecord) {
+func database(cfg *ini.File) {
 
-	// connect to database if ontvanger->dbsav is defined
-	isConnected := false
-	if cfg.Section("ontvanger").HasKey("dbsav") &&
-		cfg.Section("database").Key("type").String() == "mysql" {
+	for true {
 
-		// Build connection string
-		connStr := cfg.Section("database").Key("user").String() + ":" + cfg.Section("database").Key("pass").String() +
-			"@/" + cfg.Section("database").Key("db").String() + "?charset=utf8"
+		// connect to database if ontvanger->dbsav is defined
+		isConnected := false
+		if cfg.Section("ontvanger").HasKey("dbsav") &&
+			cfg.Section("database").Key("type").String() == "mysql" {
 
-		// Create connection pool
-		db, err := sql.Open("mysql", connStr)
-		if err != nil {
-			log.Println(err)
-		} else {
-			isConnected = true
-		}
+			// Build connection string
+			connStr := cfg.Section("database").Key("user").String() + ":" + cfg.Section("database").Key("pass").String() +
+				"@/" + cfg.Section("database").Key("db").String() + "?charset=utf8"
 
-		stmt, err = db.Prepare("INSERT INTO minew(dateTime, boxID, tagID, rssi, data) values(?,?,?,?,?)")
-		if err != nil {
-			log.Println(err)
-			isConnected = false
-		} else {
-			isConnected = true
-		}
-
-		if isConnected {
-			log.Println("Connected to database", cfg.Section("database").Key("db").String())
-		} else {
-			log.Println("Connection to database failed")
-		}
-
-	}
-	for r := range c {
-
-		if isConnected {
-			_, err := stmt.Exec(r.dateTime, r.boxID, r.tagID, r.rssi, string(r.data))
+			// Create connection pool
+			db, err := sql.Open("mysql", connStr)
 			if err != nil {
-				log.Println("Insert failed", err)
+				log.Println(err)
+			} else {
+				isConnected = true
+			}
+
+			stmt, err = db.Prepare("INSERT INTO minew(dateTime, boxID, tagID, rssi, data) values(?,?,?,?,?)")
+			if err != nil {
+				log.Println(err)
+				isConnected = false
+			} else {
+				isConnected = true
+			}
+
+			if isConnected {
+				log.Println("Connected to database", cfg.Section("database").Key("db").String())
+			} else {
+				log.Println("Connection to database failed")
 			}
 		}
-		log.Printf("%+v\n", r)
+
+		for r := range c {
+
+			if isConnected {
+				_, err := stmt.Exec(r.dateTime, r.boxID, r.tagID, r.rssi, string(r.data))
+				if err != nil {
+					log.Println("Insert failed", err)
+				}
+			}
+			log.Printf("%+v\n", r)
+		}
 	}
 }
 
-func handleConn(conn net.Conn, c chan dbRecord) {
+func handleConn(conn net.Conn) {
 
 	defer conn.Close()
 
@@ -131,7 +135,7 @@ func handleConn(conn net.Conn, c chan dbRecord) {
 	// log.Println("From", remAddr, ":", buf[:reqLen])
 
 	// Analyze packet
-	p.analyzeBLE(c)
+	p.analyzeBLE()
 
 	// Send a response back
 	_, err = conn.Write([]byte("Message received: " + string(p.content)))
@@ -140,7 +144,7 @@ func handleConn(conn net.Conn, c chan dbRecord) {
 	}
 }
 
-func (p packet) analyzeBLE(c chan dbRecord) {
+func (p packet) analyzeBLE() {
 
 	if p.content[0] == 187 && p.content[p.reqLen-1] == 221 && p.reqLen > 22 {
 
