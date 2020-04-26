@@ -32,13 +32,14 @@ func handleConn(conn net.Conn) {
         log.Println(p.remAddr, "closed connection:", err.Error())
         return
     }
-    // log.Println("From", remAddr, ":", buf[:reqLen])
+    log.Println("From", p.remAddr, ":", p.reqLen)
+    log.Println("Data:", p.content[:p.reqLen])
 
     // Analyze packet
     p.analyzeBLE()
 
     // Send a response back
-    _, err = conn.Write([]byte("Message received: " + string(p.content)))
+    _, err = conn.Write([]byte("Message received: " + string(p.content[:p.reqLen])))
     if err != nil {
         log.Println("Error wrinting to", p.remAddr, ":", err.Error())
     }
@@ -48,7 +49,7 @@ func (p packet) analyzeBLE() {
 
     // p.content is not quite json yet, so this will fail
     var tags map[string]interface{}
-    err := json.Unmarshal([]byte(p.content), &tags)
+    err := json.Unmarshal([]byte(p.content[:p.reqLen]), &tags)
     if err != nil {
         log.Println("json error:", err.Error())
         return
