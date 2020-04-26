@@ -5,8 +5,7 @@ import (
     //"encoding/hex"
     "log"
     "net"
-
-    _ "github.com/go-sql-driver/mysql"
+    "time"
 )
 
 type packet struct {
@@ -32,8 +31,7 @@ func handleConn(conn net.Conn) {
         log.Println(p.remAddr, "closed connection:", err.Error())
         return
     }
-    log.Println("From", p.remAddr, ":", p.reqLen)
-    log.Println("Data:", p.content[:p.reqLen])
+    log.Println("Incoming from:", p.remAddr)
 
     // Analyze packet
     p.analyzeBLE()
@@ -47,13 +45,49 @@ func handleConn(conn net.Conn) {
 
 func (p packet) analyzeBLE() {
 
-    // p.content is not quite json yet, so this will fail
-    var tags map[string]interface{}
+    // p.content is json data
+    var tags []map[string]interface{}
+
     err := json.Unmarshal([]byte(p.content[:p.reqLen]), &tags)
     if err != nil {
         log.Println("json error:", err.Error())
         return
     }
-    log.Println(tags)
+
+    tnow := sqltime(time.Now().Unix())
+
+    for key, tag := range tags {
+
+        // first tag is the gateway, extract boxID
+        if key == 0 {
+            if str, ok := tag["mac"].(string); ok {
+                p.boxID = str
+            } else {
+                continue
+            }
+        }
+
+        var db dbRecord
+        db.dateTime = tnow
+        db.boxID = p.boxID
+        if str, ok := tag["mac"].(string); ok {
+            db.tagID = str
+        } else {
+            continue
+        }
+        if rssi, ok := tag["rssi"].(int8); ok {
+            db.rssi = rssi
+        } else {
+            continue
+        }
+        if str, ok := tag["rawData"].(string); ok {
+            db.data = str
+        } else {
+            continue
+        }
+
+        // send dbRecord to database through channel
+        c <- db
+    }
 }
 
