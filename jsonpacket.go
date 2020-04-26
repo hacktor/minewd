@@ -2,10 +2,9 @@ package main
 
 import (
     "encoding/json"
-    "encoding/hex"
+    //"encoding/hex"
     "log"
     "net"
-    "time"
 
     _ "github.com/go-sql-driver/mysql"
 )
@@ -49,6 +48,11 @@ func (p packet) analyzeBLE() {
 
     // p.content is not quite json yet, so this will fail
     var tags map[string]interface{}
-    json.Unmarshal([]byte(byteValue), &tags)
+    err := json.Unmarshal([]byte(p.content), &tags)
+    if err != nil {
+        log.Println("json error:", err.Error())
+        return
+    }
+    log.Println(tags)
 }
 
