@@ -87,7 +87,7 @@ func (p packet) analyzeBLE() {
             if rawLen != 0 {
                 db.data = hex.EncodeToString(ble[1 : 1+rawLen])
             }
-            db.rssi = int8(ble[rawLen+2])
+            db.rssi = int(ble[rawLen+2])
 
             // send dbRecord to database through channel
             c <- db
