@@ -2,7 +2,6 @@ package main
 
 import (
     "encoding/json"
-    //"encoding/hex"
     "log"
     "net"
     "time"
@@ -15,7 +14,7 @@ type packet struct {
     boxID   string
 }
 
-func handleConn(conn net.Conn) {
+func handleConn(conn net.Conn, c chan dbRecord) {
 
     defer conn.Close()
 
@@ -34,7 +33,7 @@ func handleConn(conn net.Conn) {
     log.Println("Incoming from:", p.remAddr)
 
     // Analyze packet
-    p.analyzeBLE()
+    p.analyzeBLE(c)
 
     // Send a response back
     _, err = conn.Write([]byte("Message received: " + string(p.content[:p.reqLen])))
@@ -43,7 +42,7 @@ func handleConn(conn net.Conn) {
     }
 }
 
-func (p packet) analyzeBLE() {
+func (p packet) analyzeBLE(c chan dbRecord) {
 
     // p.content is json data
     var tags []map[string]interface{}
@@ -62,28 +61,29 @@ func (p packet) analyzeBLE() {
         if key == 0 {
             if str, ok := tag["mac"].(string); ok {
                 p.boxID = str
-            } else {
-                continue
             }
+            continue
         }
 
         var db dbRecord
         db.dateTime = tnow
         db.boxID = p.boxID
+
         if str, ok := tag["mac"].(string); ok {
             db.tagID = str
         } else {
+            log.Println("mac failed:", tag["mac"])
             continue
         }
-        if rssi, ok := tag["rssi"].(int8); ok {
-            db.rssi = rssi
+        if num, ok := tag["rssi"].(float64); ok {
+            db.rssi = int(num)
         } else {
-            continue
+            db.rssi = -127
         }
         if str, ok := tag["rawData"].(string); ok {
             db.data = str
         } else {
-            continue
+            db.data = ""
         }
 
         // send dbRecord to database through channel

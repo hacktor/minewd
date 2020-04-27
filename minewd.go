@@ -15,7 +15,7 @@ type dbRecord struct {
     dateTime string
     tagID    string
     boxID    string
-    rssi     int8
+    rssi     int
     data     string
 }
 
@@ -53,7 +53,7 @@ func main() {
             continue
         }
 
-        go handleConn(conn)
+        go handleConn(conn, c)
     }
 }
 
