@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type packet struct {
+type jsonpacket struct {
 	content []byte
 	remAddr string
 	reqLen  int
@@ -19,7 +19,7 @@ func handleConn(conn net.Conn, c chan dbRecord) {
 	defer conn.Close()
 
 	// Make a buffer to hold incoming data.
-	var p packet
+	var p jsonpacket
 	p.content = make([]byte, 16384)
 	var err error
 
@@ -42,7 +42,7 @@ func handleConn(conn net.Conn, c chan dbRecord) {
 	}
 }
 
-func (p packet) analyzeBLE(c chan dbRecord) {
+func (p jsonpacket) analyzeBLE(c chan dbRecord) {
 
 	// p.content is json data
 	var tags []map[string]interface{}
