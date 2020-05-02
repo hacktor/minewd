@@ -19,7 +19,7 @@ type packet struct {
 	nrBLE   uint16
 }
 
-func handleConn(conn net.Conn) {
+func handleConn(conn net.Conn, c chan dbRecord) {
 
 	defer conn.Close()
 
@@ -38,7 +38,7 @@ func handleConn(conn net.Conn) {
 	// log.Println("From", remAddr, ":", buf[:reqLen])
 
 	// Analyze packet
-	p.analyzeBLE()
+	p.analyzeBLE(c)
 
 	// Send a response back
 	_, err = conn.Write([]byte("Message received: " + string(p.content)))
@@ -47,7 +47,7 @@ func handleConn(conn net.Conn) {
 	}
 }
 
-func (p packet) analyzeBLE() {
+func (p packet) analyzeBLE(c chan dbRecord) {
 
 	if p.content[0] == 187 && p.content[p.reqLen-1] == 221 && p.reqLen > 22 {
 
