@@ -14,7 +14,7 @@ type jsonpacket struct {
 	boxID   string
 }
 
-func handleJSONConn(conn net.Conn) {
+func handleJSONConn(conn net.Conn, c chan dbRecord) {
 
 	defer conn.Close()
 
@@ -33,7 +33,7 @@ func handleJSONConn(conn net.Conn) {
 	log.Println("Incoming from:", p.remAddr)
 
 	// Analyze packet
-	p.analyzeJSON()
+	p.analyzeJSON(c)
 
 	// Send a response back
 	_, err = conn.Write([]byte("Message received: " + string(p.content[:p.reqLen])))
@@ -42,7 +42,7 @@ func handleJSONConn(conn net.Conn) {
 	}
 }
 
-func (p jsonpacket) analyzeJSON() {
+func (p jsonpacket) analyzeJSON(c chan dbRecord) {
 
 	// p.content is json data
 	var tags []map[string]interface{}
