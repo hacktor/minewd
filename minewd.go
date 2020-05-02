@@ -27,6 +27,8 @@ var c = make(chan dbRecord, 64)
 
 func main() {
 
+    var hc func(net.Conn, chan dbRecord)
+
     // load configuration
     cfg, err := ini.Load("minewd.ini")
     if err != nil {
@@ -35,9 +37,19 @@ func main() {
     }
     var format string
     if cfg.Section("ontvanger").HasKey("format") {
-        format = cfg.Section("database").Key("format").String()
+        format = cfg.Section("ontvanger").Key("format").String()
     } else {
         log.Fatalln("Missing format in configuration (binary/json)")
+    }
+
+    var handle func(net.Conn, chan dbRecord)
+    switch format {
+    case "binary", "bin":
+        handle = handleBINConn
+    case "json":
+        handle = handleJSONConn
+    default:
+        log.Fatalf("Unknown format %s, should be either json or binary\n")
     }
 
     // start database goroutine
@@ -60,12 +72,7 @@ func main() {
             continue
         }
 
-        switch format {
-        case "bin", "binary":
-            go handleConn(conn, c)
-        case "json":
-            go handleJSONConn(conn, c)
-        }
+        go handle(conn, c)
     }
 }
 
