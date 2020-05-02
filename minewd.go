@@ -27,8 +27,6 @@ var c = make(chan dbRecord, 64)
 
 func main() {
 
-    var hc func(net.Conn, chan dbRecord)
-
     // load configuration
     cfg, err := ini.Load("minewd.ini")
     if err != nil {
