@@ -1,93 +1,97 @@
 package main
 
 import (
-    "encoding/json"
-    "log"
-    "net"
-    "time"
+	"encoding/json"
+	"log"
+	"net"
+	"time"
 )
 
 type packet struct {
-    content []byte
-    remAddr string
-    reqLen  int
-    boxID   string
+	content []byte
+	remAddr string
+	reqLen  int
+	boxID   string
 }
 
 func handleConn(conn net.Conn, c chan dbRecord) {
 
-    defer conn.Close()
+	defer conn.Close()
 
-    // Make a buffer to hold incoming data.
-    var p packet
-    p.content = make([]byte, 16384)
-    var err error
+	// Make a buffer to hold incoming data.
+	var p packet
+	p.content = make([]byte, 16384)
+	var err error
 
-    // Read the incoming connection into the buffer.
-    p.remAddr = conn.RemoteAddr().String()
-    p.reqLen, err = conn.Read(p.content)
-    if err != nil {
-        log.Println(p.remAddr, "closed connection:", err.Error())
-        return
-    }
-    log.Println("Incoming from:", p.remAddr)
+	// Read the incoming connection into the buffer.
+	p.remAddr = conn.RemoteAddr().String()
+	p.reqLen, err = conn.Read(p.content)
+	if err != nil {
+		log.Println(p.remAddr, "closed connection:", err.Error())
+		return
+	}
+	log.Println("Incoming from:", p.remAddr)
 
-    // Analyze packet
-    p.analyzeBLE(c)
+	// Analyze packet
+	p.analyzeBLE(c)
 
-    // Send a response back
-    _, err = conn.Write([]byte("Message received: " + string(p.content[:p.reqLen])))
-    if err != nil {
-        log.Println("Error wrinting to", p.remAddr, ":", err.Error())
-    }
+	// Send a response back
+	_, err = conn.Write([]byte("Message received: " + string(p.content[:p.reqLen])))
+	if err != nil {
+		log.Println("Error wrinting to", p.remAddr, ":", err.Error())
+	}
 }
 
 func (p packet) analyzeBLE(c chan dbRecord) {
 
-    // p.content is json data
-    var tags []map[string]interface{}
+	// p.content is json data
+	var tags []map[string]interface{}
 
-    err := json.Unmarshal([]byte(p.content[:p.reqLen]), &tags)
-    if err != nil {
-        log.Println("json error:", err.Error())
-        return
-    }
+	err := json.Unmarshal([]byte(p.content[:p.reqLen]), &tags)
+	if err != nil {
+		log.Println("json error:", err.Error())
+		return
+	}
 
-    tnow := sqltime(time.Now().Unix())
+	tnow := sqltime(time.Now().Unix())
 
-    for key, tag := range tags {
+	for key, tag := range tags {
 
-        // first tag is the gateway, extract boxID
-        if key == 0 {
-            if str, ok := tag["mac"].(string); ok {
-                p.boxID = str
-            }
-            continue
-        }
+		// first tag is the gateway, extract boxID
+		if key == 0 {
+			if str, ok := tag["mac"].(string); ok {
+				p.boxID = str
+			}
+			continue
+		}
 
-        var db dbRecord
-        db.dateTime = tnow
-        db.boxID = p.boxID
+		var db dbRecord
+		db.dateTime = tnow
+		db.boxID = p.boxID
 
-        if str, ok := tag["mac"].(string); ok {
-            db.tagID = str
-        } else {
-            log.Println("mac failed:", tag["mac"])
-            continue
-        }
-        if num, ok := tag["rssi"].(float64); ok {
-            db.rssi = int(num)
-        } else {
-            db.rssi = -127
-        }
-        if str, ok := tag["rawData"].(string); ok {
-            db.data = str
-        } else {
-            db.data = ""
-        }
+		if str, ok := tag["mac"].(string); ok {
+			db.tagID = str
+		} else {
+			log.Println("mac failed:", tag["mac"])
+			continue
+		}
+		if num, ok := tag["rssi"].(float64); ok {
+			db.rssi = int(num)
+		} else {
+			db.rssi = -127
+		}
+		if num, ok := tag["battery"].(float64); ok {
+			db.batt = int(num)
+		} else {
+			db.rssi = -127
+		}
+		if str, ok := tag["rawData"].(string); ok {
+			db.data = str
+		} else {
+			db.data = ""
+		}
 
-        // send dbRecord to database through channel
-        c <- db
-    }
+		// send dbRecord to database through channel
+		c <- db
+	}
 }
-
