@@ -62,9 +62,9 @@ func main() {
 
         switch format {
         case "bin", "binary":
-            go handleConn(conn)
+            go handleConn(conn, c)
         case "json":
-            go handleJSONConn(conn)
+            go handleJSONConn(conn, c)
         }
     }
 }
