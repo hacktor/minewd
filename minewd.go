@@ -1,7 +1,6 @@
 package main
 
 import (
-    "github.com/hacktor/minewd/packet"
     "database/sql"
     "log"
     "net"
@@ -34,8 +33,12 @@ func main() {
         log.Printf("Fail to read file: %v", err)
         os.Exit(1)
     }
-    if cfg.Section("ontvanger").HasKey("dbsav") &&
-        cfg.Section("database").Key("type").String() == "mysql" {
+    var format string
+    if cfg.Section("ontvanger").HasKey("format") {
+        format = cfg.Section("database").Key("format").String()
+    } else {
+        log.Fatalln("Missing format in configuration (binary/json)")
+    }
 
     // start database goroutine
     go database(cfg)
@@ -57,7 +60,12 @@ func main() {
             continue
         }
 
-        go handleConn(conn, c)
+        switch format {
+        case "bin", "binary":
+            go handleConn(conn)
+        case "json":
+            go handleJSONConn(conn)
+        }
     }
 }
 
