@@ -19,7 +19,7 @@ type packet struct {
 	nrBLE   uint16
 }
 
-func handleConn(conn net.Conn, c chan dbRecord) {
+func handleBINConn(conn net.Conn, c chan dbRecord) {
 
 	defer conn.Close()
 
