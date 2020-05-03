@@ -83,7 +83,7 @@ func (p jsonpacket) analyzeJSON(c chan dbRecord) {
 		if num, ok := tag["battery"].(float64); ok {
 			db.batt = int(num)
 		} else {
-			db.rssi = -127
+			db.batt = 0
 		}
 		if str, ok := tag["rawData"].(string); ok {
 			db.data = str
