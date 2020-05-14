@@ -4,56 +4,18 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"log"
-	"net"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type packet struct {
-	content []byte
-	datal   uint32
-	remAddr string
-	reqLen  int
-	boxID   string
-	nrBLE   uint16
-}
-
-func handleBINConn(conn net.Conn, c chan dbRecord) {
-
-	defer conn.Close()
-
-	// Make a buffer to hold incoming data.
-	var p packet
-	p.content = make([]byte, 16384)
-	var err error
-
-	// Read the incoming connection into the buffer.
-	p.remAddr = conn.RemoteAddr().String()
-	p.reqLen, err = conn.Read(p.content)
-	if err != nil {
-		log.Println(p.remAddr, "closed connection:", err.Error())
-		return
-	}
-	// log.Println("From", remAddr, ":", buf[:reqLen])
-
-	// Analyze packet
-	p.analyzeBLE(c)
-
-	// Send a response back
-	_, err = conn.Write([]byte("Message received: " + string(p.content)))
-	if err != nil {
-		log.Println("Error wrinting to", p.remAddr, ":", err.Error())
-	}
-}
-
 func (p packet) analyzeBLE(c chan dbRecord) {
 
+    var nrBLE uint16 = 0
 	if p.content[0] == 187 && p.content[p.reqLen-1] == 221 && p.reqLen > 22 {
 
-		p.datal = binary.BigEndian.Uint32(p.content[2:6])
 		p.boxID = hex.EncodeToString(p.content[6:12])
-		p.nrBLE = binary.BigEndian.Uint16(p.content[12:14])
+		nrBLE = binary.BigEndian.Uint16(p.content[12:14])
 	} else {
 		log.Println("Ignoring corrupted packet")
 		return
@@ -61,7 +23,7 @@ func (p packet) analyzeBLE(c chan dbRecord) {
 
 	ble := p.content[14:]
 
-	for i := p.nrBLE; i > 0; i-- {
+	for i := nrBLE; i > 0; i-- {
 
 		var d uint16
 		tnow := sqltime(time.Now().Unix())
