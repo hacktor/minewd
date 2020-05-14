@@ -20,6 +20,13 @@ type dbRecord struct {
     data     string
 }
 
+type packet struct {
+    content []byte
+    remAddr string
+    reqLen  int
+    boxID   string
+}
+
 // global variables to share between main and the handlers
 var db *sql.DB
 var stmt *sql.Stmt
@@ -38,16 +45,6 @@ func main() {
         format = cfg.Section("ontvanger").Key("format").String()
     } else {
         log.Fatalln("Missing format in configuration (binary/json)")
-    }
-
-    var handle func(net.Conn, chan dbRecord)
-    switch format {
-    case "binary", "bin":
-        handle = handleBINConn
-    case "json":
-        handle = handleJSONConn
-    default:
-        log.Fatalf("Unknown format %s, should be either json or binary\n")
     }
 
     // start database goroutine
@@ -70,7 +67,42 @@ func main() {
             continue
         }
 
-        go handle(conn, c)
+        go handleConn(conn, format)
+    }
+}
+
+func handleConn(conn net.Conn, format string) {
+
+    defer conn.Close()
+
+    // Make a buffer to hold incoming data.
+    var p packet
+    p.content = make([]byte, 16384)
+    var err error
+
+    // Read the incoming connection into the buffer.
+    p.remAddr = conn.RemoteAddr().String()
+    p.reqLen, err = conn.Read(p.content)
+    if err != nil {
+        log.Println(p.remAddr, "closed connection:", err.Error())
+        return
+    }
+    log.Println("Incoming from:", p.remAddr)
+
+    // Analyze packet
+    switch format {
+    case "binary", "bin":
+        p.analyzeBLE(c)
+    case "json":
+        p.analyzeJSON(c)
+    default:
+        log.Fatalf("Unknown format %s, should be either json or binary\n")
+    }
+
+    // Send a response back
+    _, err = conn.Write([]byte("Message received: " + string(p.content[:p.reqLen])))
+    if err != nil {
+        log.Println("Error wrinting to", p.remAddr, ":", err.Error())
     }
 }
 
