@@ -3,46 +3,10 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"net"
 	"time"
 )
 
-type jsonpacket struct {
-	content []byte
-	remAddr string
-	reqLen  int
-	boxID   string
-}
-
-func handleJSONConn(conn net.Conn, c chan dbRecord) {
-
-	defer conn.Close()
-
-	// Make a buffer to hold incoming data.
-	var p jsonpacket
-	p.content = make([]byte, 16384)
-	var err error
-
-	// Read the incoming connection into the buffer.
-	p.remAddr = conn.RemoteAddr().String()
-	p.reqLen, err = conn.Read(p.content)
-	if err != nil {
-		log.Println(p.remAddr, "closed connection:", err.Error())
-		return
-	}
-	log.Println("Incoming from:", p.remAddr)
-
-	// Analyze packet
-	p.analyzeJSON(c)
-
-	// Send a response back
-	_, err = conn.Write([]byte("Message received: " + string(p.content[:p.reqLen])))
-	if err != nil {
-		log.Println("Error wrinting to", p.remAddr, ":", err.Error())
-	}
-}
-
-func (p jsonpacket) analyzeJSON(c chan dbRecord) {
+func (p packet) analyzeJSON(c chan dbRecord) {
 
 	// p.content is json data
 	var tags []map[string]interface{}
